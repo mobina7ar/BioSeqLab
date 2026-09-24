@@ -1,0 +1,171 @@
+"""
+BioSeqLab
+A simple DNA sequence analyzer.
+"""
+
+VALID_NUCLEOTIDES = {"A", "T", "G", "C"}
+
+COMPLEMENT_MAP = {
+    "A": "T",
+    "T": "A",
+    "G": "C",
+    "C": "G",
+}
+
+START_CODON = "ATG"
+
+STOP_CODONS = {"TAA", "TAG", "TGA"}
+
+
+def validate_dna(sequence: str) -> bool:
+    """Check whether a sequence contains only valid DNA nucleotides."""
+    if not sequence:
+        return False
+
+    return set(sequence.upper()) <= VALID_NUCLEOTIDES
+
+
+def count_nucleotides(sequence: str) -> dict[str, int]:
+    """Count occurrences of each nucleotide in the sequence."""
+    return {
+        nucleotide: sequence.count(nucleotide)
+        for nucleotide in VALID_NUCLEOTIDES
+    }
+
+
+def gc_content(sequence: str) -> float:
+    """Calculate the percentage of G and C nucleotides in the sequence."""
+    counts = count_nucleotides(sequence)
+    gc_total = counts["G"] + counts["C"]
+
+    return (gc_total / len(sequence)) * 100
+
+
+def nucleotide_percentage(sequence: str) -> dict[str, float]:
+    """Calculate the percentage of each nucleotide in the sequence."""
+    counts = count_nucleotides(sequence)
+    length = len(sequence)
+
+    return {
+        nucleotide: (count / length) * 100
+        for nucleotide, count in counts.items()
+    }
+
+
+def reverse_complement(sequence: str) -> str:
+    """Generate the reverse complement of a DNA sequence."""
+    complemented = (COMPLEMENT_MAP[nucleotide] for nucleotide in sequence)
+
+    return "".join(complemented)[::-1]
+
+
+def find_codons(sequence: str) -> list[str]:
+    """Split a sequence into non-overlapping codons of length 3."""
+    return [
+        sequence[i:i + 3]
+        for i in range(0, len(sequence) - 2, 3)
+    ]
+
+
+def _find_codon_positions(sequence: str, targets: set[str]) -> list[int]:
+    """Find all positions where a codon from targets occurs (overlapping allowed)."""
+    positions = []
+
+    for i in range(len(sequence) - 2):
+        if sequence[i:i + 3] in targets:
+            positions.append(i)
+
+    return positions
+
+
+def find_start_codons(sequence: str) -> list[int]:
+    """Find all positions of the start codon (ATG) in the sequence."""
+    return _find_codon_positions(sequence, {START_CODON})
+
+
+def find_stop_codons(sequence: str) -> list[tuple[str, int]]:
+    """Find all stop codons and their positions in the sequence."""
+    positions = _find_codon_positions(sequence, STOP_CODONS)
+
+    return [(sequence[i:i + 3], i) for i in positions]
+
+
+def print_report(sequence: str) -> None:
+    """Print a formatted analysis report for a DNA sequence."""
+    counts = count_nucleotides(sequence)
+    percentages = nucleotide_percentage(sequence)
+    starts = find_start_codons(sequence)
+    stops = find_stop_codons(sequence)
+
+    print(f"\n{'=' * 12} RESULT {'=' * 12}\n")
+    print(f"Sequence : {sequence}")
+    print(f"Length   : {len(sequence)}")
+
+    print("\nNucleotide Count")
+    for nucleotide in sorted(counts):
+        print(f"{nucleotide} : {counts[nucleotide]}")
+
+    print(f"\nGC Content : {gc_content(sequence):.2f}%")
+
+    print("\nNucleotide Percentage")
+    for nucleotide in sorted(percentages):
+        print(f"{nucleotide} : {percentages[nucleotide]:.2f}%")
+
+    print(f"\nReverse Complement\n{reverse_complement(sequence)}")
+
+    print("\nCodons")
+    codons = find_codons(sequence)
+    print(", ".join(codons) if codons else "No complete codons found.")
+
+    print("\nStart Codon (ATG)")
+    if starts:
+        for position in starts:
+            print(f"Found at position {position}")
+    else:
+        print("Not found.")
+
+    print("\nStop Codons")
+    if stops:
+        for codon, position in stops:
+            print(f"{codon} at position {position}")
+    else:
+        print("Not found.")
+
+    print(f"\n{'=' * 12} SUMMARY {'=' * 12}")
+    print(f"Length      : {len(sequence)}")
+    print(f"GC Content  : {gc_content(sequence):.2f}%")
+    print(f"Start Codon : {'YES' if starts else 'NO'}")
+    print(f"Stop Codon  : {'YES' if stops else 'NO'}")
+    print(f"{'=' * 33}\n")
+
+
+def main() -> None:
+    """Run the interactive BioSeqLab menu."""
+    while True:
+        print("=" * 35)
+        print("           BioSeqLab")
+        print("      DNA Sequence Analyzer")
+        print("=" * 35)
+        print("1. Analyze DNA")
+        print("2. Exit")
+
+        choice = input("\nSelect: ").strip()
+
+        if choice == "1":
+            sequence = input("\nEnter DNA sequence: ").strip().upper()
+
+            if validate_dna(sequence):
+                print_report(sequence)
+            else:
+                print("\nInvalid DNA sequence. Only A, T, G and C are allowed.\n")
+
+        elif choice == "2":
+            print("\nThank you for using BioSeqLab.")
+            break
+
+        else:
+            print("\nInvalid choice.\n")
+
+
+if __name__ == "__main__":
+    main()
