@@ -1,0 +1,427 @@
+"""
+BioSeqLab
+A simple DNA and RNA sequence analyzer.
+"""
+
+# --- DNA constants ---
+
+VALID_NUCLEOTIDES = {"A", "T", "G", "C"}
+
+COMPLEMENT_MAP = {
+    "A": "T",
+    "T": "A",
+    "G": "C",
+    "C": "G",
+}
+
+START_CODON = "ATG"
+
+STOP_CODONS = {"TAA", "TAG", "TGA"}
+
+CODON_TABLE = {
+    "TTT": "F", "TTC": "F", "TTA": "L", "TTG": "L",
+    "CTT": "L", "CTC": "L", "CTA": "L", "CTG": "L",
+    "ATT": "I", "ATC": "I", "ATA": "I", "ATG": "M",
+    "GTT": "V", "GTC": "V", "GTA": "V", "GTG": "V",
+    "TCT": "S", "TCC": "S", "TCA": "S", "TCG": "S",
+    "CCT": "P", "CCC": "P", "CCA": "P", "CCG": "P",
+    "ACT": "T", "ACC": "T", "ACA": "T", "ACG": "T",
+    "GCT": "A", "GCC": "A", "GCA": "A", "GCG": "A",
+    "TAT": "Y", "TAC": "Y", "TAA": "*", "TAG": "*",
+    "CAT": "H", "CAC": "H", "CAA": "Q", "CAG": "Q",
+    "AAT": "N", "AAC": "N", "AAA": "K", "AAG": "K",
+    "GAT": "D", "GAC": "D", "GAA": "E", "GAG": "E",
+    "TGT": "C", "TGC": "C", "TGA": "*", "TGG": "W",
+    "CGT": "R", "CGC": "R", "CGA": "R", "CGG": "R",
+    "AGT": "S", "AGC": "S", "AGA": "R", "AGG": "R",
+    "GGT": "G", "GGC": "G", "GGA": "G", "GGG": "G",
+}
+
+# --- RNA constants ---
+
+VALID_RNA_NUCLEOTIDES = {"A", "U", "G", "C"}
+
+RNA_COMPLEMENT_MAP = {
+    "A": "U",
+    "U": "A",
+    "G": "C",
+    "C": "G",
+}
+
+RNA_START_CODON = "AUG"
+
+RNA_STOP_CODONS = {"UAA", "UAG", "UGA"}
+
+RNA_CODON_TABLE = {
+    "UUU": "F", "UUC": "F", "UUA": "L", "UUG": "L",
+    "CUU": "L", "CUC": "L", "CUA": "L", "CUG": "L",
+    "AUU": "I", "AUC": "I", "AUA": "I", "AUG": "M",
+    "GUU": "V", "GUC": "V", "GUA": "V", "GUG": "V",
+    "UCU": "S", "UCC": "S", "UCA": "S", "UCG": "S",
+    "CCU": "P", "CCC": "P", "CCA": "P", "CCG": "P",
+    "ACU": "T", "ACC": "T", "ACA": "T", "ACG": "T",
+    "GCU": "A", "GCC": "A", "GCA": "A", "GCG": "A",
+    "UAU": "Y", "UAC": "Y", "UAA": "*", "UAG": "*",
+    "CAU": "H", "CAC": "H", "CAA": "Q", "CAG": "Q",
+    "AAU": "N", "AAC": "N", "AAA": "K", "AAG": "K",
+    "GAU": "D", "GAC": "D", "GAA": "E", "GAG": "E",
+    "UGU": "C", "UGC": "C", "UGA": "*", "UGG": "W",
+    "CGU": "R", "CGC": "R", "CGA": "R", "CGG": "R",
+    "AGU": "S", "AGC": "S", "AGA": "R", "AGG": "R",
+    "GGU": "G", "GGC": "G", "GGA": "G", "GGG": "G",
+}
+
+
+# --- Shared helpers ---
+
+def find_codons(sequence: str) -> list[str]:
+    """Split a sequence into non-overlapping codons of length 3."""
+    return [
+        sequence[i:i + 3]
+        for i in range(0, len(sequence) - 2, 3)
+    ]
+
+
+def _find_codon_positions(sequence: str, targets: set[str]) -> list[int]:
+    """Find all positions where a codon from targets occurs (overlapping allowed)."""
+    positions = []
+
+    for i in range(len(sequence) - 2):
+        if sequence[i:i + 3] in targets:
+            positions.append(i)
+
+    return positions
+
+
+def _find_orfs(sequence: str, start_positions: list[int], codon_table: dict[str, str]) -> list[dict]:
+    """Find all open reading frames given start positions and a codon table."""
+    orfs = []
+
+    for start in start_positions:
+        codons = find_codons(sequence[start:])
+        amino_acids = []
+
+        for offset, codon in enumerate(codons):
+            amino_acid = codon_table[codon]
+
+            if amino_acid == "*":
+                orfs.append({
+                    "start": start,
+                    "end": start + (offset + 1) * 3,
+                    "protein": "".join(amino_acids),
+                })
+                break
+
+            amino_acids.append(amino_acid)
+
+    return orfs
+
+
+# --- DNA functions ---
+
+def validate_dna(sequence: str) -> bool:
+    """Check whether a sequence contains only valid DNA nucleotides."""
+    if not sequence:
+        return False
+
+    return set(sequence.upper()) <= VALID_NUCLEOTIDES
+
+
+def count_nucleotides(sequence: str) -> dict[str, int]:
+    """Count occurrences of each nucleotide in a DNA sequence."""
+    return {
+        nucleotide: sequence.count(nucleotide)
+        for nucleotide in VALID_NUCLEOTIDES
+    }
+
+
+def gc_content(sequence: str) -> float:
+    """Calculate the percentage of G and C nucleotides in a DNA sequence."""
+    counts = count_nucleotides(sequence)
+    gc_total = counts["G"] + counts["C"]
+
+    return (gc_total / len(sequence)) * 100
+
+
+def nucleotide_percentage(sequence: str) -> dict[str, float]:
+    """Calculate the percentage of each nucleotide in a DNA sequence."""
+    counts = count_nucleotides(sequence)
+    length = len(sequence)
+
+    return {
+        nucleotide: (count / length) * 100
+        for nucleotide, count in counts.items()
+    }
+
+
+def reverse_complement(sequence: str) -> str:
+    """Generate the reverse complement of a DNA sequence."""
+    complemented = (COMPLEMENT_MAP[nucleotide] for nucleotide in sequence)
+
+    return "".join(complemented)[::-1]
+
+
+def transcribe(sequence: str) -> str:
+    """Transcribe a DNA sequence into RNA by replacing T with U."""
+    return sequence.replace("T", "U")
+
+
+def find_start_codons(sequence: str) -> list[int]:
+    """Find all positions of the start codon (ATG) in a DNA sequence."""
+    return _find_codon_positions(sequence, {START_CODON})
+
+
+def find_stop_codons(sequence: str) -> list[tuple[str, int]]:
+    """Find all stop codons and their positions in a DNA sequence."""
+    positions = _find_codon_positions(sequence, STOP_CODONS)
+
+    return [(sequence[i:i + 3], i) for i in positions]
+
+
+def find_orfs(sequence: str) -> list[dict]:
+    """Find all open reading frames (ATG to in-frame stop codon) in a DNA sequence."""
+    return _find_orfs(sequence, find_start_codons(sequence), CODON_TABLE)
+
+
+def translate(sequence: str) -> str:
+    """Translate a DNA sequence into a protein, using the first ORF found."""
+    orfs = find_orfs(sequence)
+
+    return orfs[0]["protein"] if orfs else ""
+
+
+# --- RNA functions ---
+
+def validate_rna(sequence: str) -> bool:
+    """Check whether a sequence contains only valid RNA nucleotides."""
+    if not sequence:
+        return False
+
+    return set(sequence.upper()) <= VALID_RNA_NUCLEOTIDES
+
+
+def count_rna_nucleotides(sequence: str) -> dict[str, int]:
+    """Count occurrences of each nucleotide in an RNA sequence."""
+    return {
+        nucleotide: sequence.count(nucleotide)
+        for nucleotide in VALID_RNA_NUCLEOTIDES
+    }
+
+
+def rna_gc_content(sequence: str) -> float:
+    """Calculate the percentage of G and C nucleotides in an RNA sequence."""
+    counts = count_rna_nucleotides(sequence)
+    gc_total = counts["G"] + counts["C"]
+
+    return (gc_total / len(sequence)) * 100
+
+
+def rna_nucleotide_percentage(sequence: str) -> dict[str, float]:
+    """Calculate the percentage of each nucleotide in an RNA sequence."""
+    counts = count_rna_nucleotides(sequence)
+    length = len(sequence)
+
+    return {
+        nucleotide: (count / length) * 100
+        for nucleotide, count in counts.items()
+    }
+
+
+def rna_reverse_complement(sequence: str) -> str:
+    """Generate the reverse complement of an RNA sequence."""
+    complemented = (RNA_COMPLEMENT_MAP[nucleotide] for nucleotide in sequence)
+
+    return "".join(complemented)[::-1]
+
+
+def find_rna_start_codons(sequence: str) -> list[int]:
+    """Find all positions of the start codon (AUG) in an RNA sequence."""
+    return _find_codon_positions(sequence, {RNA_START_CODON})
+
+
+def find_rna_stop_codons(sequence: str) -> list[tuple[str, int]]:
+    """Find all stop codons and their positions in an RNA sequence."""
+    positions = _find_codon_positions(sequence, RNA_STOP_CODONS)
+
+    return [(sequence[i:i + 3], i) for i in positions]
+
+
+def find_rna_orfs(sequence: str) -> list[dict]:
+    """Find all open reading frames (AUG to in-frame stop codon) in an RNA sequence."""
+    return _find_orfs(sequence, find_rna_start_codons(sequence), RNA_CODON_TABLE)
+
+
+def translate_rna(sequence: str) -> str:
+    """Translate an RNA sequence into a protein, using the first ORF found."""
+    orfs = find_rna_orfs(sequence)
+
+    return orfs[0]["protein"] if orfs else ""
+
+
+# --- Reporting ---
+
+def print_report(sequence: str) -> None:
+    """Print a formatted analysis report for a DNA sequence."""
+    counts = count_nucleotides(sequence)
+    percentages = nucleotide_percentage(sequence)
+    starts = find_start_codons(sequence)
+    stops = find_stop_codons(sequence)
+
+    print(f"\n{'=' * 12} DNA RESULT {'=' * 12}\n")
+    print(f"Sequence : {sequence}")
+    print(f"Length   : {len(sequence)}")
+
+    print("\nNucleotide Count")
+    for nucleotide in sorted(counts):
+        print(f"{nucleotide} : {counts[nucleotide]}")
+
+    print(f"\nGC Content : {gc_content(sequence):.2f}%")
+
+    print("\nNucleotide Percentage")
+    for nucleotide in sorted(percentages):
+        print(f"{nucleotide} : {percentages[nucleotide]:.2f}%")
+
+    print(f"\nReverse Complement\n{reverse_complement(sequence)}")
+
+    print(f"\nTranscription (RNA)\n{transcribe(sequence)}")
+
+    print("\nCodons")
+    codons = find_codons(sequence)
+    print(", ".join(codons) if codons else "No complete codons found.")
+
+    print("\nProtein Translation")
+    protein = translate(sequence)
+    print(protein if protein else "No start codon found; translation not possible.")
+
+    print("\nOpen Reading Frames")
+    orfs = find_orfs(sequence)
+    if orfs:
+        for orf in orfs:
+            print(f"[{orf['start']}-{orf['end']}] {orf['protein']}")
+    else:
+        print("No complete ORFs found.")
+
+    print("\nStart Codon (ATG)")
+    if starts:
+        for position in starts:
+            print(f"Found at position {position}")
+    else:
+        print("Not found.")
+
+    print("\nStop Codons")
+    if stops:
+        for codon, position in stops:
+            print(f"{codon} at position {position}")
+    else:
+        print("Not found.")
+
+    print(f"\n{'=' * 12} SUMMARY {'=' * 12}")
+    print(f"Length      : {len(sequence)}")
+    print(f"GC Content  : {gc_content(sequence):.2f}%")
+    print(f"Start Codon : {'YES' if starts else 'NO'}")
+    print(f"Stop Codon  : {'YES' if stops else 'NO'}")
+    print(f"{'=' * 36}\n")
+
+
+def print_rna_report(sequence: str) -> None:
+    """Print a formatted analysis report for an RNA sequence."""
+    counts = count_rna_nucleotides(sequence)
+    percentages = rna_nucleotide_percentage(sequence)
+    starts = find_rna_start_codons(sequence)
+    stops = find_rna_stop_codons(sequence)
+
+    print(f"\n{'=' * 12} RNA RESULT {'=' * 12}\n")
+    print(f"Sequence : {sequence}")
+    print(f"Length   : {len(sequence)}")
+
+    print("\nNucleotide Count")
+    for nucleotide in sorted(counts):
+        print(f"{nucleotide} : {counts[nucleotide]}")
+
+    print(f"\nGC Content : {rna_gc_content(sequence):.2f}%")
+
+    print("\nNucleotide Percentage")
+    for nucleotide in sorted(percentages):
+        print(f"{nucleotide} : {percentages[nucleotide]:.2f}%")
+
+    print(f"\nReverse Complement\n{rna_reverse_complement(sequence)}")
+
+    print("\nCodons")
+    codons = find_codons(sequence)
+    print(", ".join(codons) if codons else "No complete codons found.")
+
+    print("\nProtein Translation")
+    protein = translate_rna(sequence)
+    print(protein if protein else "No start codon found; translation not possible.")
+
+    print("\nOpen Reading Frames")
+    orfs = find_rna_orfs(sequence)
+    if orfs:
+        for orf in orfs:
+            print(f"[{orf['start']}-{orf['end']}] {orf['protein']}")
+    else:
+        print("No complete ORFs found.")
+
+    print("\nStart Codon (AUG)")
+    if starts:
+        for position in starts:
+            print(f"Found at position {position}")
+    else:
+        print("Not found.")
+
+    print("\nStop Codons")
+    if stops:
+        for codon, position in stops:
+            print(f"{codon} at position {position}")
+    else:
+        print("Not found.")
+
+    print(f"\n{'=' * 12} SUMMARY {'=' * 12}")
+    print(f"Length      : {len(sequence)}")
+    print(f"GC Content  : {rna_gc_content(sequence):.2f}%")
+    print(f"Start Codon : {'YES' if starts else 'NO'}")
+    print(f"Stop Codon  : {'YES' if stops else 'NO'}")
+    print(f"{'=' * 36}\n")
+
+
+# --- CLI ---
+
+def main() -> None:
+    """Run the interactive BioSeqLab menu."""
+    while True:
+        print("=" * 35)
+        print("           BioSeqLab")
+        print("   DNA and RNA Sequence Analyzer")
+        print("=" * 35)
+        print("1. Analyze DNA")
+        print("2. Analyze RNA")
+        print("3. Exit")
+
+        choice = input("\nSelect: ").strip()
+
+        if choice == "1":
+            sequence = input("\nEnter DNA sequence: ").strip().upper()
+
+            if validate_dna(sequence):
+                print_report(sequence)
+            else:
+                print("\nInvalid DNA sequence. Only A, T, G and C are allowed.\n")
+
+        elif choice == "2":
+            sequence = input("\nEnter RNA sequence: ").strip().upper()
+
+            if validate_rna(sequence):
+                print_rna_report(sequence)
+            else:
+                print("\nInvalid RNA sequence. Only A, U, G and C are allowed.\n")
+
+        elif choice == "3":
+            print("\nThank you for using BioSeqLab.")
+            break
+
+        else:
+            print("\nInvalid choice.\n")
+
+
+if __name__ == "__main__":
+    main()
